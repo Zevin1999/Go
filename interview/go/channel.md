@@ -25,3 +25,169 @@
 
 从channel读数据 从一个channel读数据简单过程如下：
 如果等待发送队列sendq不为空，且没有缓冲区，直接从sendq中取出G，把G中数据读出，最后把G唤醒，结束读取过程； 如果等待发送队列sendq不为空，此时说明缓冲区已满，从缓冲区中首部读出数据，把G中数据写入缓冲区尾部，把G唤醒，结束读取过程； 如果缓冲区中有数据，则从缓冲区取出数据，结束读取过程； 将当前goroutine加入recvq，进入睡眠，等待被写goroutine唤醒；
+
+
+
+Channel
+
++ 概述
+
+    + 用于goroutine之间消息的传递
+    + 通信顺序进程并发模式（CSP）
+
++ 类型
+
+    + 缓冲/非缓冲
+
+      ```
+      // 缓冲通道声明长度
+      // 缓冲通道在容量为空时，读端goroutine会阻塞；容量未满时，读写两端都不会阻塞；容量满了之后，写端goroutine会阻塞
+      ch := make(chan int, 1024)  
+      // 非缓冲通道未声明长度
+      // 非缓冲通道对于读写两端的goroutine都会阻塞
+      ch := make(chan int)
+      ```
+
+    + 获取（读）/发送（写）
+
+      ```
+      chan     读写
+      <-chan   只读
+      chan<-   只写
+      ```
+
+    + 状态（空/满/关闭）
+
+      ```
+      ch := make(chan interface{})
+      close(ch)
+      ```
+
++ 使用
+
+    + 1
+
+      ```
+      package main
+      
+      import "fmt"
+      
+      func main(){
+          ch := make(chan int, 1)
+      
+          go func() {
+              ch <- 999
+          }()
+      
+          value := <- ch
+          fmt.Println("value:", value)
+      }
+      ```
+
+    + close
+
+      ```
+      func main() {
+          ch := make(chan int, 5)
+          sign := make(chan string, 2)
+      
+          go func() {
+              for i := 1; i <= 5; i++ {
+                  ch <- i
+      
+                  time.Sleep(time.Second)
+              }
+      
+              close(ch)
+      
+              fmt.Println("the channel is closed")
+      
+              sign <- "func1"
+      
+          }()
+      
+          go func() {
+              for {
+                  i, ok := <-ch
+                  fmt.Printf("%d, %v \n", i, ok)
+      
+                  if !ok {
+                      break
+                  }
+      
+                  time.Sleep(time.Second * 2 )
+              }
+      
+              sign <- "func2"
+      
+          }()
+      
+          <-sign
+          <-sign
+      }
+      ```
+
+    + for select
+
+      ```
+      func main() {
+          put := make(chan int)
+      
+          go func() {
+              for i := 0; i < 10; i++ {
+                  put <- i
+      
+                  time.Sleep(time.Millisecond * 100)
+              }
+          }()
+      
+          go func() {
+              for {
+                  select {
+                  case value := <-put:
+                      fmt.Println("输出：", value)
+                  }
+              }
+          }()
+      
+          time.Sleep(time.Second * 2)
+          fmt.Println("退出")
+      }
+      ```
+
+    + 生产者消费者
+
+      ```
+      func main() {
+      
+          cook := make(chan int)
+          quit := make(chan bool)
+          quit2 := make(chan bool)
+      
+          go func() {
+              for i := 0; i < 5; i++ {
+                  cook <- i + 1
+                  fmt.Println("cook:", i+1)
+                  time.Sleep(time.Second)
+              }
+          quit <- true
+          }()
+          go func() {
+              for {
+                  select {
+                  case v := <-cook:
+                      fmt.Println("eat:", v)
+                  case <-quit:
+                      quit2 <- true
+                  }
+              }
+          }()
+        
+        <-quit2
+          fmt.Println("done")
+      }
+      ```
+
+
+参考：https://zhuanlan.zhihu.com/p/338985480
+
